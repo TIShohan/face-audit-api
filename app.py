@@ -336,28 +336,45 @@ def download_results(job_id):
 
 @app.route('/api/download-noface/<job_id>', methods=['GET'])
 def download_noface_images(job_id):
-    """Download NO FACE images as ZIP"""
+    """Download NO FACE images as ZIP (Streamed for memory efficiency)"""
     job_folder = os.path.join(NO_FACE_FOLDER, job_id)
     
     if not os.path.exists(job_folder):
         return jsonify({'error': 'No images found'}), 404
-    
-    # Create ZIP in memory
-    memory_file = io.BytesIO()
-    with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+        
+    def generate_zip():
+        # Using a generator to stream the ZIP file
+        # We use a trick: store data in BytesIO but yield it immediately and clear the buffer
+        buffer = io.BytesIO()
+        z = zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED)
+        
         for root, dirs, files in os.walk(job_folder):
             for file in files:
                 file_path = os.path.join(root, file)
-                zf.write(file_path, arcname=file)
-    
-    memory_file.seek(0)
-    
-    return send_file(
-        memory_file,
-        mimetype='application/zip',
-        as_attachment=True,
-        download_name=f'noface_images_{job_id}.zip'
+                # Add file to zip
+                z.write(file_path, arcname=file)
+                
+                # Yield the current buffer content
+                buffer.seek(0)
+                yield buffer.read()
+                
+                # Clear buffer for next chunk
+                buffer.seek(0)
+                buffer.truncate()
+        
+        # Close the zip file
+        z.close()
+        
+        # Yield the final part (central directory)
+        buffer.seek(0)
+        yield buffer.read()
+
+    response = app.response_class(
+        generate_zip(),
+        mimetype='application/zip'
     )
+    response.headers.set('Content-Disposition', 'attachment', filename=f'noface_images_{job_id}.zip')
+    return response
 
 @app.route('/api/jobs', methods=['GET'])
 def list_jobs():

@@ -29,11 +29,12 @@ This guide shows you how to deploy your Face Detection Audit System to the inter
 
 1. **Create a GitHub Repository**
    ```bash
-   cd "e:\My University Project\Project 2\face-audit-api"
+   # Initialize git in your project folder
    git init
    git add .
    git commit -m "Initial commit"
    git branch -M main
+   # Create a repo on GitHub first, then run:
    git remote add origin https://github.com/yourusername/face-audit-api.git
    git push -u origin main
    ```
@@ -48,10 +49,10 @@ This guide shows you how to deploy your Face Detection Audit System to the inter
        startCommand: gunicorn app:app
        envVars:
          - key: PYTHON_VERSION
-           value: 3.10.0
+           value: 3.12.0
    ```
 
-3. **Update `requirements.txt`** (add gunicorn):
+3. **Update `requirements.txt`** (add gunicorn & use headless opencv):
    ```txt
    flask>=3.0.0
    flask-cors>=4.0.0
@@ -70,6 +71,7 @@ This guide shows you how to deploy your Face Detection Audit System to the inter
    - Connect your GitHub repository
    - Select the repository
    - Render will auto-detect Python
+   - **Important**: In settings, set `PYTHON_VERSION` to `3.12.0` if not set automatically
    - Click "Create Web Service"
 
 6. **Wait for deployment** (5-10 minutes)
@@ -89,7 +91,7 @@ This guide shows you how to deploy your Face Detection Audit System to the inter
 
 2. **Create `runtime.txt`**:
    ```
-   python-3.10.0
+   python-3.12.0
    ```
 
 3. **Sign up at [railway.app](https://railway.app)**
@@ -120,7 +122,7 @@ This guide shows you how to deploy your Face Detection Audit System to the inter
 
 3. **Create `runtime.txt`**:
    ```
-   python-3.10.13
+   python-3.12.0
    ```
 
 4. **Update requirements.txt** (add gunicorn):
