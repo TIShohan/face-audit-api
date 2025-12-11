@@ -8,7 +8,20 @@ from flask_cors import CORS
 import pandas as pd
 import requests
 import cv2
-import mediapipe as mp
+import sys
+try:
+    import mediapipe as mp
+except ImportError:
+    print("\n" + "="*60)
+    print("CRITICAL ERROR: MediaPipe library is missing!")
+    print("="*60)
+    print("This application REQUIRES both MediaPipe and OpenCV DNN to achieve")
+    print("near 100% accuracy. Single model detection is not allowed.")
+    print("\nPlease install Python 3.12 and run:")
+    print("pip install -r requirements.txt")
+    print("="*60 + "\n")
+    sys.exit(1)
+
 import numpy as np
 import os
 import uuid
@@ -34,12 +47,12 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(RESULTS_FOLDER, exist_ok=True)
 os.makedirs(NO_FACE_FOLDER, exist_ok=True)
 
-# Processing configuration
-DOWNLOAD_TIMEOUT = 20
-MEDIAPIPE_CONF_THRESH = 0.80
-DNN_CONF_THRESH = 0.70
-NUM_THREADS = 6
-BATCH_SIZE = 100  # Smaller batches for web to give more frequent updates
+# Processing configuration (DEFAULTS)
+DEFAULT_DOWNLOAD_TIMEOUT = 20
+DEFAULT_MEDIAPIPE_CONF_THRESH = 0.80
+DEFAULT_DNN_CONF_THRESH = 0.70
+DEFAULT_NUM_THREADS = 6
+DEFAULT_BATCH_SIZE = 100
 
 # Global job storage (in production, use Redis or database)
 jobs = {}
@@ -58,48 +71,53 @@ net = cv2.dnn.readNetFromCaffe(prototxt_path, model_path)
 # ========== FACE DETECTION LOGIC ==========
 # ==========================================
 
-def download_image(url):
+def download_image(url, timeout=DEFAULT_DOWNLOAD_TIMEOUT):
     """Download image from URL"""
     try:
-        response = requests.get(url, timeout=DOWNLOAD_TIMEOUT)
+        response = requests.get(url, timeout=timeout)
         response.raise_for_status()
         img_array = np.asarray(bytearray(response.content), dtype=np.uint8)
         return cv2.imdecode(img_array, cv2.IMREAD_COLOR)
     except:
         return None
 
-def detect_with_dnn(image):
+def detect_with_dnn(image, threshold=DEFAULT_DNN_CONF_THRESH):
     """Detect face using OpenCV DNN"""
     (h, w) = image.shape[:2]
     blob = cv2.dnn.blobFromImage(cv2.resize(image, (300, 300)), 1.0,
                                  (300, 300), (104.0, 177.0, 123.0))
     net.setInput(blob)
     detections = net.forward()
-    return np.max(detections[0, 0, :, 2]) > DNN_CONF_THRESH
+    return np.max(detections[0, 0, :, 2]) > threshold
 
-def process_row(row, job_id):
+def process_row(row, job_id, config):
     """Process a single row for face detection"""
     img_url = row.get("Check-In Photo")
     id_val = row.get("id", row.name)
+    
+    # Extract config
+    timeout = config.get('download_timeout', DEFAULT_DOWNLOAD_TIMEOUT)
+    mp_thresh = config.get('mediapipe_thresh', DEFAULT_MEDIAPIPE_CONF_THRESH)
+    dnn_thresh = config.get('dnn_thresh', DEFAULT_DNN_CONF_THRESH)
 
     if pd.isna(img_url) or str(img_url).strip() == "":
         return row.name, "Skipped (empty URL)", ""
 
-    image = download_image(str(img_url))
+    image = download_image(str(img_url), timeout)
 
     if image is None:
         return row.name, "DOWNLOAD_ERROR", "Image could not be downloaded"
 
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     
-    # MediaPipe detection
-    with mp_face_detection.FaceDetection(min_detection_confidence=MEDIAPIPE_CONF_THRESH) as face_detector:
+    # MediaPipe detection (Primary)
+    with mp_face_detection.FaceDetection(min_detection_confidence=mp_thresh) as face_detector:
         results = face_detector.process(image_rgb)
         face_found = results.detections is not None and len(results.detections) > 0
 
     # Fallback to DNN if MediaPipe fails
     if not face_found:
-        face_found = detect_with_dnn(image)
+        face_found = detect_with_dnn(image, dnn_thresh)
 
     if face_found:
         return row.name, "GOOD", ""
@@ -111,7 +129,7 @@ def process_row(row, job_id):
         cv2.imwrite(save_path, image)
         return row.name, "NO FACE", f"Saved: {save_path}"
 
-def process_csv_job(job_id, csv_path, original_filename):
+def process_csv_job(job_id, csv_path, original_filename, config):
     """Background job to process CSV file"""
     try:
         with jobs_lock:
@@ -155,9 +173,11 @@ def process_csv_job(job_id, csv_path, original_filename):
         download_err_count = 0
         
         # Process with threading
-        with ThreadPoolExecutor(max_workers=NUM_THREADS) as executor:
+        num_threads = config.get('num_threads', DEFAULT_NUM_THREADS)
+        
+        with ThreadPoolExecutor(max_workers=num_threads) as executor:
             future_to_idx = {
-                executor.submit(process_row, row, job_id): original_idx
+                executor.submit(process_row, row, job_id, config): original_idx
                 for original_idx, row in df.loc[processing_indices].iterrows()
             }
             
@@ -228,6 +248,18 @@ def upload_csv():
     if not file.filename.endswith('.csv'):
         return jsonify({'error': 'Only CSV files are allowed'}), 400
     
+    # Get Config from Form Data
+    try:
+        config = {
+            'download_timeout': int(request.form.get('download_timeout', DEFAULT_DOWNLOAD_TIMEOUT)),
+            'mediapipe_thresh': float(request.form.get('mediapipe_thresh', DEFAULT_MEDIAPIPE_CONF_THRESH)),
+            'dnn_thresh': float(request.form.get('dnn_thresh', DEFAULT_DNN_CONF_THRESH)),
+            'num_threads': int(request.form.get('num_threads', DEFAULT_NUM_THREADS)),
+            'batch_size': int(request.form.get('batch_size', DEFAULT_BATCH_SIZE))
+        }
+    except ValueError:
+         return jsonify({'error': 'Invalid configuration values'}), 400
+
     # Generate unique job ID
     job_id = str(uuid.uuid4())
     
@@ -243,6 +275,7 @@ def upload_csv():
             'status': 'queued',
             'original_filename': file.filename,
             'uploaded_at': datetime.now().isoformat(),
+            'config': config,
             'total_rows': 0,
             'rows_to_process': 0,
             'processed': 0,
@@ -252,7 +285,7 @@ def upload_csv():
         }
     
     # Start background processing
-    thread = threading.Thread(target=process_csv_job, args=(job_id, filepath, file.filename))
+    thread = threading.Thread(target=process_csv_job, args=(job_id, filepath, file.filename, config))
     thread.daemon = True
     thread.start()
     
@@ -335,10 +368,10 @@ def list_jobs():
     return jsonify(all_jobs), 200
 
 if __name__ == '__main__':
-    print("🚀 Face Detection API Server Starting...")
-    print(f"📁 Upload folder: {UPLOAD_FOLDER}")
-    print(f"📁 Results folder: {RESULTS_FOLDER}")
-    print(f"📁 No Face folder: {NO_FACE_FOLDER}")
-    print(f"🤖 Models loaded successfully")
-    print(f"🌐 Server running on http://localhost:5000")
+    print(">> Face Detection API Server Starting...")
+    print(f">> Upload folder: {UPLOAD_FOLDER}")
+    print(f">> Results folder: {RESULTS_FOLDER}")
+    print(f">> No Face folder: {NO_FACE_FOLDER}")
+    print(f">> Models loaded successfully")
+    print(f">> Server running on http://localhost:5000")
     app.run(debug=True, host='0.0.0.0', port=5000)

@@ -40,6 +40,21 @@ const resultsSummary = document.getElementById('resultsSummary');
 const jobsList = document.getElementById('jobsList');
 const activeJobs = document.getElementById('activeJobs');
 
+const configToggle = document.getElementById('configToggle');
+const configPanel = document.getElementById('configPanel');
+
+// ==========================================
+// CONFIGURATION HANDLING
+// ==========================================
+
+if (configToggle && configPanel) {
+    configToggle.addEventListener('click', () => {
+        configToggle.classList.toggle('active');
+        const isVisible = configPanel.style.display === 'block';
+        configPanel.style.display = isVisible ? 'none' : 'block';
+    });
+}
+
 // ==========================================
 // FILE UPLOAD HANDLING
 // ==========================================
@@ -128,6 +143,13 @@ uploadBtn.addEventListener('click', async () => {
 
     const formData = new FormData();
     formData.append('file', file);
+
+    // Append Configuration Parameters
+    formData.append('download_timeout', document.getElementById('downloadTimeout').value);
+    formData.append('mediapipe_thresh', document.getElementById('mpThresh').value);
+    formData.append('dnn_thresh', document.getElementById('dnnThresh').value);
+    formData.append('num_threads', document.getElementById('numThreads').value);
+    formData.append('batch_size', document.getElementById('batchSize').value);
 
     try {
         const response = await fetch(`${API_BASE}/api/upload`, {
