@@ -46,10 +46,12 @@ This guide shows you how to deploy your Face Detection Audit System to the inter
        name: face-detection-audit
        env: python
        buildCommand: pip install -r requirements.txt
-       startCommand: gunicorn app:app
+       # CRITICAL: Use 1 worker to keep job memory shared. Use threads for concurrency.
+       startCommand: gunicorn app:app --workers 1 --threads 8
        envVars:
          - key: PYTHON_VERSION
            value: 3.12.0
+
    ```
 
 3. **Update `requirements.txt`** (add gunicorn & use headless opencv):
@@ -63,6 +65,7 @@ This guide shows you how to deploy your Face Detection Audit System to the inter
    numpy>=1.24.0
    tqdm>=4.66.0
    gunicorn>=21.0.0
+   APScheduler>=3.10.0
    ```
 
 4. **Sign up at [render.com](https://render.com)**
@@ -72,6 +75,7 @@ This guide shows you how to deploy your Face Detection Audit System to the inter
    - Select the repository
    - Render will auto-detect Python
    - **Important**: In settings, set `PYTHON_VERSION` to `3.12.0` if not set automatically
+   - **Important**: In settings, set Start Command to `gunicorn app:app --workers 1 --threads 8`
    - Click "Create Web Service"
 
 6. **Wait for deployment** (5-10 minutes)
@@ -86,7 +90,8 @@ This guide shows you how to deploy your Face Detection Audit System to the inter
 
 1. **Create `Procfile`**:
    ```
-   web: gunicorn app:app --bind 0.0.0.0:$PORT
+   # CRITICAL: Use 1 worker to keep job memory shared
+   web: gunicorn app:app --workers 1 --threads 8 --bind 0.0.0.0:$PORT
    ```
 
 2. **Create `runtime.txt`**:

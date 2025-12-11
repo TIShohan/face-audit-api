@@ -34,12 +34,12 @@ const errorCount = document.getElementById('errorCount');
 
 const downloadCsvBtn = document.getElementById('downloadCsvBtn');
 const downloadImagesBtn = document.getElementById('downloadImagesBtn');
+const downloadProgressBtn = document.getElementById('downloadProgressBtn');
 const newJobBtn = document.getElementById('newJobBtn');
 const resultsSummary = document.getElementById('resultsSummary');
 
 const jobsList = document.getElementById('jobsList');
 const activeJobs = document.getElementById('activeJobs');
-
 const configToggle = document.getElementById('configToggle');
 const configPanel = document.getElementById('configPanel');
 
@@ -162,6 +162,10 @@ uploadBtn.addEventListener('click', async () => {
         if (response.ok) {
             currentJobId = data.job_id;
 
+            // Save to LocalStorage for crash recovery
+            localStorage.setItem('activeJobId', currentJobId);
+            localStorage.setItem('activeJobName', file.name);
+
             // Hide upload section, show processing section
             uploadSection.style.display = 'none';
             processingSection.style.display = 'block';
@@ -203,6 +207,17 @@ async function checkJobStatus() {
 
     try {
         const response = await fetch(`${API_BASE}/api/status/${currentJobId}`);
+
+        // Handle 404 (Job might be expired/deleted if server restarted)
+        if (response.status === 404) {
+            clearInterval(statusCheckInterval);
+            localStorage.removeItem('activeJobId');
+            localStorage.removeItem('activeJobName');
+            alert('This job session has expired or was lost (Server Restart). Please upload again.');
+            resetToUpload();
+            return;
+        }
+
         const data = await response.json();
 
         if (response.ok) {
@@ -210,10 +225,12 @@ async function checkJobStatus() {
 
             if (data.status === 'completed') {
                 clearInterval(statusCheckInterval);
+                // Don't clear LocalStorage yet, user might refresh on results page
                 showResults(data);
             } else if (data.status === 'failed') {
                 clearInterval(statusCheckInterval);
                 alert('Processing failed: ' + (data.error || 'Unknown error'));
+                localStorage.removeItem('activeJobId'); // Clear on fail
                 resetToUpload();
             }
         }
@@ -261,6 +278,14 @@ downloadCsvBtn.addEventListener('click', () => {
     }
 });
 
+if (downloadProgressBtn) {
+    downloadProgressBtn.addEventListener('click', () => {
+        if (currentJobId) {
+            window.location.href = `${API_BASE}/api/download/${currentJobId}`;
+        }
+    });
+}
+
 downloadImagesBtn.addEventListener('click', () => {
     if (currentJobId) {
         window.location.href = `${API_BASE}/api/download-noface/${currentJobId}`;
@@ -273,6 +298,9 @@ newJobBtn.addEventListener('click', () => {
 
 function resetToUpload() {
     currentJobId = null;
+    localStorage.removeItem('activeJobId');
+    localStorage.removeItem('activeJobName');
+
     fileInput.value = '';
 
     uploadSection.style.display = 'block';
@@ -362,10 +390,33 @@ function createJobItem(job) {
 // Load jobs on page load
 document.addEventListener('DOMContentLoaded', () => {
     loadJobsHistory();
+    checkForActiveJob();
 
     // Refresh jobs every 10 seconds
     setInterval(loadJobsHistory, 10000);
 });
+
+function checkForActiveJob() {
+    const savedJobId = localStorage.getItem('activeJobId');
+    const savedJobName = localStorage.getItem('activeJobName');
+
+    if (savedJobId) {
+        console.log('Restoring active job:', savedJobId);
+        currentJobId = savedJobId;
+
+        // Restore UI state
+        uploadSection.style.display = 'none';
+        processingSection.style.display = 'block';
+        resultsSection.style.display = 'none';
+
+        if (savedJobName) {
+            currentJobName.textContent = savedJobName;
+        }
+
+        // Resume status checking
+        startStatusChecking();
+    }
+}
 
 // ==========================================
 // UTILITY FUNCTIONS

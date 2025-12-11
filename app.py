@@ -33,6 +33,8 @@ import threading
 import time
 
 app = Flask(__name__, static_folder='static')
+# Security: Limit upload size to 100MB
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024
 CORS(app)
 
 # ==========================================
@@ -47,6 +49,22 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(RESULTS_FOLDER, exist_ok=True)
 os.makedirs(NO_FACE_FOLDER, exist_ok=True)
 
+from apscheduler.schedulers.background import BackgroundScheduler
+import shutil
+import time
+
+# Configuration
+UPLOAD_FOLDER = 'uploads'
+RESULTS_FOLDER = 'results'
+NO_FACE_FOLDER = 'no_face_images'
+MODEL_FOLDER = 'Model'
+MAX_FILE_AGE_HOURS = 24  # Files older than this will be deleted
+
+# Create directories
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(RESULTS_FOLDER, exist_ok=True)
+os.makedirs(NO_FACE_FOLDER, exist_ok=True)
+
 # Processing configuration (DEFAULTS)
 DEFAULT_DOWNLOAD_TIMEOUT = 20
 DEFAULT_MEDIAPIPE_CONF_THRESH = 0.80
@@ -57,6 +75,58 @@ DEFAULT_BATCH_SIZE = 100
 # Global job storage (in production, use Redis or database)
 jobs = {}
 jobs_lock = threading.Lock()
+
+# ==========================================
+# ========== AUTO-CLEANUP SYSTEM ===========
+# ==========================================
+
+def cleanup_old_files():
+    """Delete files older than MAX_FILE_AGE_HOURS"""
+    now = time.time()
+    cutoff = now - (MAX_FILE_AGE_HOURS * 3600)
+    
+    print(f"[{datetime.now().isoformat()}] Running auto-cleanup...")
+    
+    deleted_count = 0
+    
+    # Folders to clean
+    folders = [UPLOAD_FOLDER, RESULTS_FOLDER, NO_FACE_FOLDER]
+    
+    for folder in folders:
+        if not os.path.exists(folder):
+            continue
+            
+        for root, dirs, files in os.walk(folder, topdown=False):
+            for name in files:
+                filepath = os.path.join(root, name)
+                try:
+                    if os.path.getmtime(filepath) < cutoff:
+                        os.remove(filepath)
+                        deleted_count += 1
+                except Exception as e:
+                    print(f"Error deleting file {filepath}: {e}")
+            
+            # Clean empty directories
+            for name in dirs:
+                dirpath = os.path.join(root, name)
+                try:
+                    # If directory empty (and not one of the main folders), delete it
+                    if not os.listdir(dirpath) and dirpath not in folders:
+                        os.rmdir(dirpath)
+                except Exception as e:
+                    print(f"Error removing dir {dirpath}: {e}")
+
+    if deleted_count > 0:
+        print(f"[{datetime.now().isoformat()}] Cleanup complete. Deleted {deleted_count} old files.")
+
+# Initialize Scheduler
+scheduler = BackgroundScheduler()
+scheduler.add_job(func=cleanup_old_files, trigger="interval", hours=1)
+scheduler.start()
+
+# Ensure scheduler shuts down when app exits
+import atexit
+atexit.register(lambda: scheduler.shutdown())
 
 # ==========================================
 # ========== INITIALIZE MODELS =============
@@ -204,8 +274,15 @@ def process_csv_job(job_id, csv_path, original_filename, config):
                     jobs[job_id]['good_count'] = good_count
                     jobs[job_id]['noface_count'] = noface_count
                     jobs[job_id]['download_error_count'] = download_err_count
+                
+                # Save partial results every BATCH_SIZE rows
+                # We use a temp lock or just overwrite, pandas atomic write is safest but simple overwrite works here
+                # checking against BATCH_SIZE to reduce I/O
+                if jobs[job_id]['processed'] % config.get('batch_size', DEFAULT_BATCH_SIZE) == 0:
+                    result_path = os.path.join(RESULTS_FOLDER, f"{job_id}_results.csv")
+                    df.to_csv(result_path, index=False)
         
-        # Save results
+        # Save FINAL results
         result_path = os.path.join(RESULTS_FOLDER, f"{job_id}_results.csv")
         df.to_csv(result_path, index=False)
         
