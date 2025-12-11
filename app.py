@@ -413,45 +413,49 @@ def download_results(job_id):
 
 @app.route('/api/download-noface/<job_id>', methods=['GET'])
 def download_noface_images(job_id):
-    """Download NO FACE images as ZIP (Streamed for memory efficiency)"""
+    """Download NO FACE images as ZIP (Safe Temp File Method)"""
     job_folder = os.path.join(NO_FACE_FOLDER, job_id)
     
     if not os.path.exists(job_folder):
         return jsonify({'error': 'No images found'}), 404
-        
-    def generate_zip():
-        # Using a generator to stream the ZIP file
-        # We use a trick: store data in BytesIO but yield it immediately and clear the buffer
-        buffer = io.BytesIO()
-        z = zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED)
-        
-        for root, dirs, files in os.walk(job_folder):
-            for file in files:
-                file_path = os.path.join(root, file)
-                # Add file to zip
-                z.write(file_path, arcname=file)
-                
-                # Yield the current buffer content
-                buffer.seek(0)
-                yield buffer.read()
-                
-                # Clear buffer for next chunk
-                buffer.seek(0)
-                buffer.truncate()
-        
-        # Close the zip file
-        z.close()
-        
-        # Yield the final part (central directory)
-        buffer.seek(0)
-        yield buffer.read()
+    
+    # Check if there are any files
+    if not os.listdir(job_folder):
+        return jsonify({'error': 'No images to zip'}), 404
 
-    response = app.response_class(
-        generate_zip(),
-        mimetype='application/zip'
-    )
-    response.headers.set('Content-Disposition', 'attachment', filename=f'noface_images_{job_id}.zip')
-    return response
+    # Generate a secure temp filename
+    zip_filename = f"{job_id}_noface"
+    zip_path = os.path.join(RESULTS_FOLDER, zip_filename) # make_archive adds .zip extension automatically
+    final_zip_path = zip_path + ".zip"
+
+    try:
+        # Create ZIP file on disk (Standard robust method)
+        shutil.make_archive(zip_path, 'zip', job_folder)
+        
+        # Stream the file to the user
+        def generate():
+            with open(final_zip_path, 'rb') as f:
+                while True:
+                    chunk = f.read(4096 * 1024) # 4MB chunks
+                    if not chunk:
+                        break
+                    yield chunk
+            
+            # Clean up after streaming is done
+            try:
+                os.remove(final_zip_path)
+            except Exception as e:
+                print(f"Error removing temp zip: {e}")
+
+        response = app.response_class(
+            generate(),
+            mimetype='application/zip'
+        )
+        response.headers.set('Content-Disposition', 'attachment', filename=f'noface_images_{job_id}.zip')
+        return response
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/jobs', methods=['GET'])
 def list_jobs():
