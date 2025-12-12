@@ -163,9 +163,9 @@ def detect_with_dnn(image, threshold=DEFAULT_DNN_CONF_THRESH):
     detections = net.forward()
     return np.max(detections[0, 0, :, 2]) > threshold
 
-def process_row(row, job_id, config):
+def process_row(row, job_id, config, image_col='Check-In Photo'):
     """Process a single row for face detection"""
-    img_url = row.get("Check-In Photo")
+    img_url = row.get(image_col)
     id_val = row.get("id", row.name)
     
     # Extract config
@@ -217,19 +217,60 @@ def process_csv_job(job_id, csv_path, original_filename, config):
             jobs[job_id]['started_at'] = datetime.now().isoformat()
         
         # Load CSV
-        df = pd.read_csv(csv_path)
+        try:
+            df = pd.read_csv(csv_path, encoding='utf-8')
+        except UnicodeDecodeError:
+             df = pd.read_csv(csv_path, encoding='latin1')
+
+        # === SMART COLUMN DETECTION ===
+        # Priority list of exact names (case-insensitive search)
+        priority_names = ['Check-In Photo', 'CheckInPhoto', 'Photo', 'Image', 'Url', 'Link']
+        image_col = None
+        
+        # 1. Exact match (Case Insensitive)
+        col_map = {c.lower(): c for c in df.columns}
+        for name in priority_names:
+            if name.lower() in col_map:
+                image_col = col_map[name.lower()]
+                break
+        
+        # 2. Substring match (e.g. "User Photo Url")
+        if not image_col:
+            for col in df.columns:
+                lower_col = col.lower()
+                if 'photo' in lower_col or 'image' in lower_col or 'url' in lower_col:
+                    image_col = col
+                    break
+        
+        # 3. Fallback (Fail if not found)
+        if not image_col:
+            with jobs_lock:
+                jobs[job_id]['status'] = 'failed'
+                jobs[job_id]['error'] = 'Could not find an image column (e.g. "Check-In Photo")'
+            return
+
+        print(f"Job {job_id}: Auto-detected image column: '{image_col}'")
+
         total_rows = len(df)
         
-        # Initialize Face_Status column if not exists
+        # Initialize Face_Status if missing
         if 'Face_Status' not in df.columns:
-            df['Face_Status'] = ''
+            print(f"Job {job_id}: 'Face_Status' column MISSING. Creating it...")
+            df['Face_Status'] = 'PENDING' # Use concrete value instead of empty string
+        else:
+            print(f"Job {job_id}: 'Face_Status' column FOUND.")
         
-        df["Face_Status"] = df["Face_Status"].astype(str).replace('nan', '', regex=False)
+        # DEBUG: Print columns to verify
+        print(f"DEBUG {job_id} Columns: {df.columns.tolist()}")
+
+        # Ensure it is string and handle NaNs/nans
+        df["Face_Status"] = df["Face_Status"].fillna('PENDING').astype(str)
+        df["Face_Status"] = df["Face_Status"].replace(['nan', 'NaN', 'None', ''], 'PENDING', regex=False)
         
-        # Identify rows to process
+        # Identify rows to process (PENDING, Failed, or Error)
         rows_to_process = df[
-            (df["Face_Status"].isna()) | 
-            (df["Face_Status"].astype(str).str.strip() == '') | 
+            (df["Face_Status"] == 'PENDING') | 
+            (df["Face_Status"].str.strip() == '') |
             (df["Face_Status"] == 'DOWNLOAD_ERROR')
         ]
         
@@ -257,7 +298,7 @@ def process_csv_job(job_id, csv_path, original_filename, config):
         
         with ThreadPoolExecutor(max_workers=num_threads) as executor:
             future_to_idx = {
-                executor.submit(process_row, row, job_id, config): original_idx
+                executor.submit(process_row, row, job_id, config, image_col): original_idx
                 for original_idx, row in df.loc[processing_indices].iterrows()
             }
             
