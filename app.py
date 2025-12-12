@@ -54,13 +54,16 @@ import shutil
 import time
 
 # Configuration
-UPLOAD_FOLDER = 'uploads'
-RESULTS_FOLDER = 'results'
-NO_FACE_FOLDER = 'no_face_images'
-MODEL_FOLDER = 'Model'
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, 'jobs_data') # Parent folder for all dynamic data
+
+UPLOAD_FOLDER = os.path.join(DATA_DIR, 'uploads')
+RESULTS_FOLDER = os.path.join(DATA_DIR, 'results')
+NO_FACE_FOLDER = os.path.join(DATA_DIR, 'no_face_images')
+MODEL_FOLDER = os.path.join(BASE_DIR, 'Model') # Model stays in root
 MAX_FILE_AGE_HOURS = 24  # Files older than this will be deleted
 
-# Create directories
+# Create directories (and the parent DATA_DIR implicitly)
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(RESULTS_FOLDER, exist_ok=True)
 os.makedirs(NO_FACE_FOLDER, exist_ok=True)
@@ -206,6 +209,9 @@ def process_row(row, job_id, config):
 def process_csv_job(job_id, csv_path, original_filename, config):
     """Background job to process CSV file"""
     try:
+        # Self-healing: Ensure results folder exists
+        os.makedirs(RESULTS_FOLDER, exist_ok=True)
+        
         with jobs_lock:
             jobs[job_id]['status'] = 'processing'
             jobs[job_id]['started_at'] = datetime.now().isoformat()
@@ -356,6 +362,10 @@ def upload_csv():
     
     # Save uploaded file
     filename = f"{job_id}_{file.filename}"
+    
+    # Ensure upload directory exists (Self-healing if deleted)
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    
     filepath = os.path.join(UPLOAD_FOLDER, filename)
     file.save(filepath)
     

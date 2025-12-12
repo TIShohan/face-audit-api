@@ -145,12 +145,18 @@ uploadBtn.addEventListener('click', async () => {
     formData.append('file', file);
 
     // Append Configuration Parameters
-    formData.append('download_timeout', document.getElementById('downloadTimeout').value);
-    formData.append('mediapipe_thresh', document.getElementById('mpThresh').value);
-    formData.append('dnn_thresh', document.getElementById('dnnThresh').value);
-    formData.append('num_threads', document.getElementById('numThreads').value);
-    formData.append('batch_size', document.getElementById('batchSize').value);
-    formData.append('save_images', document.getElementById('saveImages').checked);
+    try {
+        formData.append('download_timeout', document.getElementById('downloadTimeout')?.value || 20);
+        formData.append('mediapipe_thresh', document.getElementById('mpThresh')?.value || 0.80);
+        formData.append('dnn_thresh', document.getElementById('dnnThresh')?.value || 0.65);
+        formData.append('num_threads', document.getElementById('numThreads')?.value || 6);
+        formData.append('batch_size', document.getElementById('batchSize')?.value || 50);
+
+        const saveImagesCheckbox = document.getElementById('saveImages');
+        formData.append('save_images', saveImagesCheckbox ? saveImagesCheckbox.checked : false);
+    } catch (e) {
+        console.error("Error reading config values:", e);
+    }
 
     try {
         const response = await fetch(`${API_BASE}/api/upload`, {

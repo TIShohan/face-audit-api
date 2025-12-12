@@ -80,6 +80,24 @@
                     </div>
                 </div>
 
+                <!-- Save Images Toggle (Primary Option) -->
+                <div
+                    style="background: rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 15px; margin-top: 20px; border: 1px solid var(--border-color);">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div>
+                            <label for="saveImages"
+                                style="display: block; font-weight: 500; cursor: pointer; color: var(--text-primary);">Save
+                                "No Face" Images</label>
+                            <span class="help-text" style="display: block; margin-top: 2px;">Enable to download a ZIP of
+                                failed detections.</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="saveImages">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
                 <!-- Advanced Configuration -->
                 <div class="config-section">
                     <button class="config-toggle" id="configToggle">
@@ -111,7 +129,7 @@
 
                             <div class="form-group">
                                 <label for="dnnThresh">OpenCV DNN Confidence (0-1)</label>
-                                <input type="number" id="dnnThresh" value="0.70" min="0.1" max="1.0" step="0.05">
+                                <input type="number" id="dnnThresh" value="0.65" min="0.1" max="1.0" step="0.05">
                                 <span class="help-text">Fallback model sensitivity</span>
                             </div>
 
@@ -127,16 +145,7 @@
                                 <span class="help-text">Rows processed per batch update</span>
                             </div>
 
-                            <div class="form-group" style="grid-column: 1 / -1;">
-                                <label class="checkbox-container"
-                                    style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                                    <input type="checkbox" id="saveImages" checked style="width: auto; margin: 0;">
-                                    <span style="color: var(--text-primary); font-size: 0.9rem;">Save "No Face" Images
-                                        for Download</span>
-                                </label>
-                                <span class="help-text" style="display: block; margin-top: 5px;">Uncheck to save disk
-                                    space and increase speed.</span>
-                            </div>
+
                         </div>
                     </div>
                 </div>
@@ -334,6 +343,56 @@
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
             border: 1px solid var(--border-color);
             text-align: center;
+        }
+
+        /* Toggle Switch Styles */
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 26px;
+            flex-shrink: 0;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #3f3f46;
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked+.toggle-slider {
+            background-color: #34c759;
+            /* Apple Green */
+            box-shadow: 0 0 12px rgba(52, 199, 89, 0.6);
+            /* The Glow */
+        }
+
+        input:checked+.toggle-slider:before {
+            transform: translateX(24px);
         }
 
         .config-section {
