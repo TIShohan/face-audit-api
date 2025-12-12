@@ -134,7 +134,8 @@ function createFileList(file) {
 // UPLOAD AND PROCESSING
 // ==========================================
 
-uploadBtn.addEventListener('click', async () => {
+uploadBtn.addEventListener('click', async (e) => {
+    e.stopPropagation(); // Prevent re-opening file browser
     const file = fileInput.files[0];
     if (!file) return;
 
@@ -306,32 +307,80 @@ if (downloadProgressBtn) {
     });
 }
 
+// ==========================================
+// CUSTOM MODAL LOGIC
+// ==========================================
+const customModal = document.getElementById('customModal');
+const modalTitle = document.getElementById('modalTitle');
+const modalMessage = document.getElementById('modalMessage');
+const modalCancelBtn = document.getElementById('modalCancelBtn');
+const modalConfirmBtn = document.getElementById('modalConfirmBtn');
+
+function showModal({ title, message, confirmText = 'Confirm', cancelText = 'Cancel', isDanger = false, onConfirm }) {
+    modalTitle.textContent = title;
+    modalMessage.textContent = message;
+
+    modalConfirmBtn.textContent = confirmText;
+    modalCancelBtn.textContent = cancelText;
+
+    // Style confirm button
+    modalConfirmBtn.className = isDanger ? 'btn btn-danger-glow' : 'btn btn-primary';
+
+    // Show needed buttons
+    modalCancelBtn.style.display = cancelText ? 'block' : 'none';
+
+    customModal.style.display = 'flex';
+
+    // Handlers
+    const close = () => { customModal.style.display = 'none'; };
+
+    modalCancelBtn.onclick = close;
+
+    modalConfirmBtn.onclick = async () => {
+        if (onConfirm) await onConfirm();
+        close();
+    };
+}
+
 const cancelJobBtn = document.getElementById('cancelJobBtn');
 if (cancelJobBtn) {
-    cancelJobBtn.addEventListener('click', async () => {
+    cancelJobBtn.addEventListener('click', () => {
         if (!currentJobId) return;
 
-        if (!confirm('Are you sure you want to cancel this job? Partial results will be saved.')) {
-            return;
-        }
+        showModal({
+            title: 'Cancel Processing?',
+            message: 'Are you sure you want to stop? Partial results will be saved.',
+            confirmText: 'Yes, Stop Job',
+            isDanger: true,
+            onConfirm: async () => {
+                try {
+                    const response = await fetch(`${API_BASE}/api/cancel/${currentJobId}`, {
+                        method: 'POST'
+                    });
+                    const data = await response.json();
 
-        try {
-            const response = await fetch(`${API_BASE}/api/cancel/${currentJobId}`, {
-                method: 'POST'
-            });
-            const data = await response.json();
-
-            if (response.ok) {
-                alert('Job cancelled successfully.');
-                if (statusCheckInterval) clearInterval(statusCheckInterval);
-                resetToUpload();
-            } else {
-                alert('Failed to cancel job: ' + data.error);
+                    if (response.ok) {
+                        // Show Success Modal
+                        setTimeout(() => {
+                            showModal({
+                                title: 'Job Cancelled',
+                                message: 'The job has been stopped successfully.',
+                                confirmText: 'OK',
+                                cancelText: null, // Hide cancel button
+                                onConfirm: () => {
+                                    if (statusCheckInterval) clearInterval(statusCheckInterval);
+                                    resetToUpload();
+                                }
+                            });
+                        }, 300); // Small delay for smooth transition
+                    } else {
+                        alert('Failed: ' + data.error);
+                    }
+                } catch (error) {
+                    console.error('Cancel error:', error);
+                }
             }
-        } catch (error) {
-            console.error('Cancel error:', error);
-            alert('Error cancelling job');
-        }
+        });
     });
 }
 

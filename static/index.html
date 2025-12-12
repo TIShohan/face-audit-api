@@ -8,6 +8,7 @@
     <meta name="description"
         content="Advanced face detection system for auditing check-in photos with real-time processing and analytics">
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="modal.css">
 </head>
 
 <body>
@@ -320,6 +321,18 @@
     <div class="loading-overlay" id="loadingOverlay" style="display: none;">
         <div class="loading-spinner"></div>
         <p>Uploading file...</p>
+    </div>
+
+    <!-- Custom Modal -->
+    <div class="modal-overlay" id="customModal" style="display: none;">
+        <div class="modal-card">
+            <h3 id="modalTitle">Confirm Action</h3>
+            <p id="modalMessage">Are you sure?</p>
+            <div class="modal-actions">
+                <button class="btn btn-outline" id="modalCancelBtn">Cancel</button>
+                <button class="btn btn-primary" id="modalConfirmBtn">Confirm</button>
+            </div>
+        </div>
     </div>
 
     <script src="script.js"></script>
