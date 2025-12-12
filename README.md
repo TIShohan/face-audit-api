@@ -1,162 +1,68 @@
-# Face Detection Audit System 🎯
+# 🔍 Face Detection Audit API
 
-A modern web-based face detection system that processes CSV files containing image URLs and identifies whether images contain faces using MediaPipe and OpenCV DNN models.
+A robust, production-ready SaaS tool for auditing large datasets of user images. It detects faces using a Dual-Engine approach and generates detailed CSV reports indicating which images have valid faces and which do not.
 
-## ✨ Features
+![Face Audit Interface](static/images/hero_placeholder.png)
 
-- **📤 CSV Upload**: Upload CSV files with image URLs
-- **🤖 Dual Detection**: Uses MediaPipe + OpenCV DNN for accurate face detection
-- **📊 Real-time Progress**: Live progress tracking with detailed statistics
-- **💾 Results Download**: Download processed CSV and no-face images
-- **🎨 Modern UI**: Beautiful, responsive interface with animations
-- **⚡ Fast Processing**: Multi-threaded processing for speed
-- **📱 Mobile Friendly**: Fully responsive design
+## 🚀 Key Features
 
-## 🚀 Quick Start
+- **Dual AI Engine**: Uses **MediaPipe (Google)** for speed/accuracy + **OpenCV DNN** as a robust fallback.
+- **Massive Scale**: Capable of processing **50,000+ rows** without crashing.
+- **Smart Streaming**: Downloads result ZIPs (even 10GB+) using a streaming generator to prevent memory overflows.
+- **Crash Proof**: "Session Restore" feature remembers your job if you accidentally close the tab.
+- **Advanced Config**: Tweak sensitivity thresholds, thread counts, and download timeouts per job.
+- **No-Storage Mode**: Option to process without saving "No Face" images (Faster / Zero Disk Usage).
 
-### Prerequisites
+## �️ Tech Stack
 
-- Python 3.8 or higher
-- pip (Python package manager)
+- **Backend**: Python 3.12, Flask, Gunicorn, APScheduler (Auto-cleanup).
+- **Frontend**: HTML5, Vanilla JS, CSS (Responsive).
+- **AI/ML**: MediaPipe, OpenCV, NumPy.
 
-### Installation
+## 🏁 Quick Start (Local)
 
-1. **Clone or navigate to the project directory**
+1. **Clone the repo**
    ```bash
-   cd "e:\My University Project\Project 2\face-audit-api"
+   git clone https://github.com/yourusername/face-audit-api.git
+   cd face-audit-api
    ```
 
-2. **Install dependencies**
+2. **Install Dependencies**
    ```bash
    pip install -r requirements.txt
    ```
 
-3. **Ensure Model files are in place**
-   
-   Make sure the `Model` folder contains:
-   - `deploy.prototxt.txt`
-   - `res10_300x300_ssd_iter_140000.caffemodel`
-
-4. **Run the application**
+3. **Run the App**
    ```bash
    python app.py
    ```
+   Open `http://localhost:5000` in your browser.
 
-5. **Open your browser**
-   
-   Navigate to: `http://localhost:5000`
+## ☁️ Deployment
 
-## 📋 CSV File Format
+This app is optimized for **Render**, **Railway**, and **Heroku**.
+It includes:
+- `gunicorn` for production serving.
+- `opencv-python-headless` for server compatibility.
+- 100MB Upload Limits & Single-Worker safety config.
 
-Your CSV file should contain a column named **"Check-In Photo"** with image URLs:
+👉 **[Read the Full Deployment Guide](DEPLOYMENT.md)**
 
-```csv
-id,Check-In Photo,Other Columns...
-1,https://example.com/image1.jpg,...
-2,https://example.com/image2.jpg,...
-```
+## ⚙️ Configuration Options
 
-The system will add a **"Face_Status"** column with one of these values:
-- `GOOD` - Face detected successfully
-- `NO FACE` - No face detected (image saved for manual review)
-- `DOWNLOAD_ERROR` - Failed to download image
-- `SYSTEM_ERROR` - Processing error
+| Setting | Default | Description |
+| :--- | :--- | :--- |
+| **Download Timeout** | 20s | Max time to wait for an image URL. |
+| **MediaPipe Thresh** | 0.80 | Confidence level to accept a face (0.0 - 1.0). |
+| **DNN Thresh** | 0.70 | Confidence level for the fallback engine. |
+| **Batch Size** | 50 | Update UI progress every X images. |
+| **Save Images** | ON | if OFF, "No Face" images are discarded (Speed Mode). |
 
-## 🎯 How It Works
+## �️ Privacy & Security
 
-1. **Upload**: Upload your CSV file through the web interface
-2. **Processing**: The system:
-   - Downloads images from URLs
-   - Detects faces using MediaPipe (primary)
-   - Falls back to OpenCV DNN if needed
-   - Saves images without faces for manual review
-3. **Results**: Download:
-   - Processed CSV with face detection results
-   - ZIP file of images without faces
+- **Auto-Cleanup**: The system automatically deletes all uploads and results older than **24 hours**.
+- **Ephemeral**: On cloud platforms (Render), data is wiped on every restart.
 
-## 🛠️ Configuration
+## � License
 
-Edit `app.py` to customize:
-
-```python
-DOWNLOAD_TIMEOUT = 20         # Image download timeout (seconds)
-MEDIAPIPE_CONF_THRESH = 0.80  # MediaPipe confidence threshold
-DNN_CONF_THRESH = 0.70        # OpenCV DNN confidence threshold
-NUM_THREADS = 6               # Number of processing threads
-BATCH_SIZE = 100              # Batch size for processing
-```
-
-## 📁 Project Structure
-
-```
-face-audit-api/
-├── app.py                 # Flask backend
-├── requirements.txt       # Python dependencies
-├── Model/                 # Face detection models
-│   ├── deploy.prototxt.txt
-│   └── res10_300x300_ssd_iter_140000.caffemodel
-├── static/               # Frontend files
-│   ├── index.html        # Main page
-│   ├── style.css         # Styling
-│   └── script.js         # Client-side logic
-├── uploads/              # Uploaded CSV files (auto-created)
-├── results/              # Processed CSV files (auto-created)
-└── no_face_images/       # Images without faces (auto-created)
-```
-
-## 🌐 API Endpoints
-
-- `POST /api/upload` - Upload CSV file
-- `GET /api/status/<job_id>` - Get job status
-- `GET /api/download/<job_id>` - Download processed CSV
-- `GET /api/download-noface/<job_id>` - Download no-face images ZIP
-- `GET /api/jobs` - List all jobs
-
-## 🔧 Troubleshooting
-
-### Port Already in Use
-If port 5000 is busy, change it in `app.py`:
-```python
-app.run(debug=True, host='0.0.0.0', port=5001)
-```
-
-### Model Files Not Found
-Ensure the Model folder contains both required files:
-- `deploy.prototxt.txt`
-- `res10_300x300_ssd_iter_140000.caffemodel`
-
-### Memory Issues
-Reduce batch size and thread count in `app.py`:
-```python
-NUM_THREADS = 3
-BATCH_SIZE = 50
-```
-
-## 🚀 Deployment
-
-### Local Network Access
-The app runs on `0.0.0.0`, making it accessible on your local network:
-```
-http://<your-ip-address>:5000
-```
-
-### Production Deployment
-For production, consider:
-- Using **Gunicorn** or **uWSGI** instead of Flask's dev server
-- Setting up **Nginx** as a reverse proxy
-- Using **Redis** for job queue management
-- Deploying to **Heroku**, **AWS**, **Google Cloud**, or **Azure**
-
-## 📝 License
-
-This project is for educational/internal use.
-
-## 🙏 Credits
-
-- **MediaPipe** - Google's ML framework
-- **OpenCV** - Computer vision library
-- **Flask** - Python web framework
-
----
-
-**Made with ❤️ for efficient face detection auditing**
+MIT License. Free to use for personal or commercial projects.

@@ -150,6 +150,7 @@ uploadBtn.addEventListener('click', async () => {
     formData.append('dnn_thresh', document.getElementById('dnnThresh').value);
     formData.append('num_threads', document.getElementById('numThreads').value);
     formData.append('batch_size', document.getElementById('batchSize').value);
+    formData.append('save_images', document.getElementById('saveImages').checked);
 
     try {
         const response = await fetch(`${API_BASE}/api/upload`, {
@@ -264,6 +265,19 @@ function showResults(data) {
 
     resultsSummary.textContent = `Processed ${total} images: ${good} with faces, ${noface} without faces, ${errors} errors`;
 
+    // Hide/Show Download Images button based on config
+    // Note: status check endpoint generally returns config now? 
+    // If not, we might assume true, but for robust UI we usually need to pass it back.
+    // For now, let's just show it always unless we know for sure. 
+    // Actually, let's keep it simple: if noface_count is 0, arguably we shouldn't show it anyway.
+    // But specific to the "Save Images" setting:
+    if (data.config && data.config.save_images === false) {
+        downloadImagesBtn.style.display = 'none';
+        // Also hide partial download images if we had one (we don't yet)
+    } else {
+        downloadImagesBtn.style.display = 'inline-flex';
+    }
+
     // Load jobs history
     loadJobsHistory();
 }
@@ -282,6 +296,35 @@ if (downloadProgressBtn) {
     downloadProgressBtn.addEventListener('click', () => {
         if (currentJobId) {
             window.location.href = `${API_BASE}/api/download/${currentJobId}`;
+        }
+    });
+}
+
+const cancelJobBtn = document.getElementById('cancelJobBtn');
+if (cancelJobBtn) {
+    cancelJobBtn.addEventListener('click', async () => {
+        if (!currentJobId) return;
+
+        if (!confirm('Are you sure you want to cancel this job? Partial results will be saved.')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE}/api/cancel/${currentJobId}`, {
+                method: 'POST'
+            });
+            const data = await response.json();
+
+            if (response.ok) {
+                alert('Job cancelled successfully.');
+                if (statusCheckInterval) clearInterval(statusCheckInterval);
+                resetToUpload();
+            } else {
+                alert('Failed to cancel job: ' + data.error);
+            }
+        } catch (error) {
+            console.error('Cancel error:', error);
+            alert('Error cancelling job');
         }
     });
 }

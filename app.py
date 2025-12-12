@@ -70,7 +70,7 @@ DEFAULT_DOWNLOAD_TIMEOUT = 20
 DEFAULT_MEDIAPIPE_CONF_THRESH = 0.80
 DEFAULT_DNN_CONF_THRESH = 0.70
 DEFAULT_NUM_THREADS = 6
-DEFAULT_BATCH_SIZE = 100
+DEFAULT_BATCH_SIZE = 50
 
 # Global job storage (in production, use Redis or database)
 jobs = {}
@@ -169,6 +169,7 @@ def process_row(row, job_id, config):
     timeout = config.get('download_timeout', DEFAULT_DOWNLOAD_TIMEOUT)
     mp_thresh = config.get('mediapipe_thresh', DEFAULT_MEDIAPIPE_CONF_THRESH)
     dnn_thresh = config.get('dnn_thresh', DEFAULT_DNN_CONF_THRESH)
+    save_images = config.get('save_images', True)
 
     if pd.isna(img_url) or str(img_url).strip() == "":
         return row.name, "Skipped (empty URL)", ""
@@ -192,12 +193,15 @@ def process_row(row, job_id, config):
     if face_found:
         return row.name, "GOOD", ""
     else:
-        # Save NO FACE image
-        job_folder = os.path.join(NO_FACE_FOLDER, job_id)
-        os.makedirs(job_folder, exist_ok=True)
-        save_path = os.path.join(job_folder, f"{id_val}_NOFACE.jpg")
-        cv2.imwrite(save_path, image)
-        return row.name, "NO FACE", f"Saved: {save_path}"
+        # Save NO FACE image only if requested
+        if save_images:
+            job_folder = os.path.join(NO_FACE_FOLDER, job_id)
+            os.makedirs(job_folder, exist_ok=True)
+            save_path = os.path.join(job_folder, f"{id_val}_NOFACE.jpg")
+            cv2.imwrite(save_path, image)
+            return row.name, "NO FACE", f"Saved: {save_path}"
+        else:
+            return row.name, "NO FACE", "Image not saved (Config)"
 
 def process_csv_job(job_id, csv_path, original_filename, config):
     """Background job to process CSV file"""
@@ -252,6 +256,15 @@ def process_csv_job(job_id, csv_path, original_filename, config):
             }
             
             for future in as_completed(future_to_idx):
+                # CHECK CANCELLATION
+                if jobs[job_id].get('status') == 'cancelled':
+                    print(f"Job {job_id} cancelled by user. Terminating threads...")
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    # Save partial results so far
+                    result_path = os.path.join(RESULTS_FOLDER, f"{job_id}_results.csv")
+                    df.to_csv(result_path, index=False)
+                    return
+
                 original_idx = future_to_idx[future]
                 
                 try:
@@ -332,7 +345,8 @@ def upload_csv():
             'mediapipe_thresh': float(request.form.get('mediapipe_thresh', DEFAULT_MEDIAPIPE_CONF_THRESH)),
             'dnn_thresh': float(request.form.get('dnn_thresh', DEFAULT_DNN_CONF_THRESH)),
             'num_threads': int(request.form.get('num_threads', DEFAULT_NUM_THREADS)),
-            'batch_size': int(request.form.get('batch_size', DEFAULT_BATCH_SIZE))
+            'batch_size': int(request.form.get('batch_size', DEFAULT_BATCH_SIZE)),
+            'save_images': request.form.get('save_images', 'true').lower() == 'true'
         }
     except ValueError:
          return jsonify({'error': 'Invalid configuration values'}), 400
@@ -456,6 +470,26 @@ def download_noface_images(job_id):
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/cancel/<job_id>', methods=['POST'])
+def cancel_job(job_id):
+    """Cancel a running job"""
+    with jobs_lock:
+        if job_id not in jobs:
+            return jsonify({'error': 'Job not found'}), 404
+        
+        # Mark as cancelled so the thread stops
+        jobs[job_id]['status'] = 'cancelled'
+        jobs[job_id]['message'] = 'Job cancelled by user'
+        
+    return jsonify({'message': 'Job cancellation requested'})
+
+@app.route('/api/status/<job_id>', methods=['GET'])
+def check_status(job_id):
+    with jobs_lock:
+        if job_id not in jobs:
+            return jsonify({'error': 'Job not found'}), 404
+        return jsonify(jobs[job_id])
 
 @app.route('/api/jobs', methods=['GET'])
 def list_jobs():

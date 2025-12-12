@@ -123,8 +123,19 @@
 
                             <div class="form-group">
                                 <label for="batchSize">Batch Size</label>
-                                <input type="number" id="batchSize" value="100" min="10" max="500">
+                                <input type="number" id="batchSize" value="50" min="10" max="500">
                                 <span class="help-text">Rows processed per batch update</span>
+                            </div>
+
+                            <div class="form-group" style="grid-column: 1 / -1;">
+                                <label class="checkbox-container"
+                                    style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                                    <input type="checkbox" id="saveImages" checked style="width: auto; margin: 0;">
+                                    <span style="color: var(--text-primary); font-size: 0.9rem;">Save "No Face" Images
+                                        for Download</span>
+                                </label>
+                                <span class="help-text" style="display: block; margin-top: 5px;">Uncheck to save disk
+                                    space and increase speed.</span>
                             </div>
                         </div>
                     </div>
@@ -152,7 +163,8 @@
                     </div>
 
                     <!-- Partial Download Button -->
-                    <div style="text-align: center; margin-top: 15px;">
+                    <div
+                        style="text-align: center; margin-top: 45px; margin-bottom: 40px; display: flex; justify-content: center; gap: 15px;">
                         <button id="downloadProgressBtn" class="btn btn-outline"
                             style="font-size: 0.85rem; padding: 8px 16px;">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="16" height="16"
@@ -160,6 +172,17 @@
                                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
                             </svg>
                             Download Progress (CSV)
+                        </button>
+
+                        <button id="cancelJobBtn" class="btn"
+                            style="background: #dc2626; color: white; border: none; font-size: 0.85rem; padding: 8px 16px; cursor: pointer;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="16" height="16"
+                                style="margin-right: 8px;">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="15" y1="9" x2="9" y2="15"></line>
+                                <line x1="9" y1="9" x2="15" y2="15"></line>
+                            </svg>
+                            Cancel Job
                         </button>
                     </div>
 
@@ -293,6 +316,26 @@
     <script src="script.js"></script>
     <style>
         /* Embedded styles for new config section */
+        .progress-card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 3rem;
+            /* Increased from 2.5rem */
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--border-color);
+            margin-bottom: 2rem;
+        }
+
+        .results-card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 3.5rem;
+            /* Increased from 2rem */
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--border-color);
+            text-align: center;
+        }
+
         .config-section {
             background: rgba(255, 255, 255, 0.03);
             border-radius: 12px;
